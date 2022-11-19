@@ -4,6 +4,7 @@
   "description": "energy_consumption tasks",
   "main": "tasmota_data_gatherer.js",
   "dependencies": {
+    "event-watchdog": "^0.0.1",
     "feiertagejs": "^1.3.2",
     "fs": "0.0.1-security",
     "influxdb-v2": "^1.0.0",

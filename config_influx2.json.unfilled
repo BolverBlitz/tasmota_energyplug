@@ -1,10 +1,12 @@
 {
+    "telegram_bot_token": "",
+    "telegram_chat_id": "",
     "orga":"Your Org",
     "bucket":"Your Bukket",
     "Influx":"Influx IP / Domain",
     "protocol": "http/https",
     "port": 8086,
-    "Token": "Influx User Token. Can be located InfluxGUI -> Data -> Tokens -> Select USer",
+    "Token": "Influx User Token. Can be located InfluxGUI -> Data -> Tokens -> Select User",
     "measurement":"Tasmota",
     "price_ht":"27,67",
     "price_nt":"20,62",

@@ -1,5 +1,6 @@
 const fetch = require('node-fetch');
 const Influxdb = require('influxdb-v2');
+const Watchdog = require('event-watchdog');
 const { isHoliday } = require('feiertagejs');
 const config = require('./config_influx2');
 const db = new Influxdb({
@@ -7,6 +8,25 @@ const db = new Influxdb({
 	protocol: config.protocol,
 	port: config.port,
 	token: config.Token
+});
+
+const watchdog = new Watchdog(10, 1);
+
+for (let counter = 0; counter <= ((config.devices.length - 1)); counter++) {
+	watchdog.addMonitor(config.devices[counter].ip)
+	console.log(`Added ${config.devices[counter].ip} to watchdog`);
+}
+
+watchdog.on('timeout', async ({ monitor, offline_since }) => {
+	try {
+		const message = `Device ${monitor} is offline since ${new Date(offline_since).toLocaleString('de-DE')}`;
+		console.log(message);
+		fetch(`https://api.telegram.org/bot${config.telegram_bot_token}/sendMessage?chat_id=${config.telegram_chat_id}&text=${message}`)
+			.then(res => res.text())
+			.then(text => console.log(text));
+	} catch (error) {
+		console.log(error);
+	}
 });
 
 const GetCurrentTariff = (today = new Date()) => {
@@ -59,55 +79,61 @@ const GetCurrentTariff = (today = new Date()) => {
 }
 
 async function writeNewDataPoint(i) {
-	const { tariff, cost } = await GetCurrentTariff();
-	const res = await fetch('http://' + config.devices[i].ip + '/cm?cmnd=status%208');
-	const data = await res.json();
-	if (config.devices[i]?.type?.toLowerCase() === "meter"){
-		await db.write(
-			{
-				org: config.orga,
-				bucket: config.bucket,
-				precision: 'ms'
-			},
-			[{
-				measurement: config.measurement,
-				tags: { host: config.devices[i].name },
-				fields:
+	try {
+		const { tariff, cost } = await GetCurrentTariff();
+		const res = await fetch('http://' + config.devices[i].ip + '/cm?cmnd=status%208');
+		const data = await res.json();
+		if (config.devices[i]?.type?.toLowerCase() === "meter") {
+			await db.write(
 				{
-					usage: data.StatusSNS.Zaehler.Verbrauch1,
-					deliverd: data.StatusSNS.Zaehler.Lieferung1,
-					L1: data.StatusSNS.Zaehler.P_L1,
-					L2: data.StatusSNS.Zaehler.P_L2,
-					L3: data.StatusSNS.Zaehler.P_L3,
+					org: config.orga,
+					bucket: config.bucket,
+					precision: 'ms'
 				},
-			}]
-		);
-	} else {
-		await db.write(
-			{
-				org: config.orga,
-				bucket: config.bucket,
-				precision: 'ms'
-			},
-			[{
-				measurement: config.measurement,
-				tags: { host: config.devices[i].name },
-				fields:
+				[{
+					measurement: config.measurement,
+					tags: { host: config.devices[i].name },
+					fields:
+					{
+						usage: data.StatusSNS.Zaehler.Verbrauch1,
+						deliverd: data.StatusSNS.Zaehler.Lieferung1,
+						L1: data.StatusSNS.Zaehler.P_L1,
+						L2: data.StatusSNS.Zaehler.P_L2,
+						L3: data.StatusSNS.Zaehler.P_L3,
+					},
+				}]
+			);
+			watchdog.updateMonitor(config.devices[i].ip);
+		} else {
+			await db.write(
 				{
-					power: data.StatusSNS.ENERGY.Power,
-					apperentpower: data.StatusSNS.ENERGY.ApparentPower,
-					reactivepower: data.StatusSNS.ENERGY.ReactivePower,
-					factor: data.StatusSNS.ENERGY.Factor,
-					today: data.StatusSNS.ENERGY.Today,
-					yesterday: data.StatusSNS.ENERGY.Yesterday,
-					voltage: data.StatusSNS.ENERGY.Voltage,
-					current: data.StatusSNS.ENERGY.Current,
-					total: data.StatusSNS.ENERGY.Total,
-					tariff: tariff,
-					costperkwhNr: parseFloat(cost)
+					org: config.orga,
+					bucket: config.bucket,
+					precision: 'ms'
 				},
-			}]
-		);
+				[{
+					measurement: config.measurement,
+					tags: { host: config.devices[i].name },
+					fields:
+					{
+						power: data.StatusSNS.ENERGY.Power,
+						apperentpower: data.StatusSNS.ENERGY.ApparentPower,
+						reactivepower: data.StatusSNS.ENERGY.ReactivePower,
+						factor: data.StatusSNS.ENERGY.Factor,
+						today: data.StatusSNS.ENERGY.Today,
+						yesterday: data.StatusSNS.ENERGY.Yesterday,
+						voltage: data.StatusSNS.ENERGY.Voltage,
+						current: data.StatusSNS.ENERGY.Current,
+						total: data.StatusSNS.ENERGY.Total,
+						tariff: tariff,
+						costperkwhNr: parseFloat(cost)
+					},
+				}]
+			);
+			watchdog.updateMonitor(config.devices[i].ip);
+		}
+	} catch (error) {
+		console.error(error.code, config.devices[i].ip);
 	}
 }
 
