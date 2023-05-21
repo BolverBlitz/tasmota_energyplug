@@ -10,7 +10,7 @@ const db = new Influxdb({
 	token: config.Token
 });
 
-const watchdog = new Watchdog(10, 1);
+const watchdog = new Watchdog(600, 1);
 
 for (let counter = 0; counter <= ((config.devices.length - 1)); counter++) {
 	watchdog.addMonitor(config.devices[counter].ip)
